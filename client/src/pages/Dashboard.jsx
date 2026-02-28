@@ -1,0 +1,320 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { useUser, SignOutButton, UserButton } from '@clerk/clerk-react';
+import {
+    Plus, FileUp, ExternalLink, LayoutDashboard,
+    BookOpen, LogOut, Loader2, CheckCircle, X
+} from 'lucide-react';
+import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
+import '../styles/Dashboard.css';
+import ThemeToggle from '../components/ThemeToggle';
+import API_BASE from '../config/api';
+
+const SUBJECT_COLORS = ['#0673f9', '#0673f9', '#0673f9'];
+
+const Dashboard = () => {
+    const { user } = useUser();
+    const navigate = useNavigate();
+    const fileInputRef = useRef(null);
+
+    const [subjects, setSubjects] = useState([]);
+    const [selectedSubject, setSelectedSubject] = useState(null);
+    const [uploading, setUploading] = useState(false);
+    const [uploadDone, setUploadDone] = useState(false);
+    const [loadingSubjects, setLoadingSubjects] = useState(true);
+
+    // Add Subject modal state
+    const [showAddModal, setShowAddModal] = useState(false);
+    const [newSubjectName, setNewSubjectName] = useState('');
+    const [addingSubject, setAddingSubject] = useState(false);
+    const [addError, setAddError] = useState('');
+
+    useEffect(() => {
+        const fetchSubjects = async () => {
+            if (!user?.id) return;
+            setLoadingSubjects(true);
+            try {
+                const { data } = await axios.get(`${API_BASE}/api/subjects?clerkId=${user.id}`);
+                if (data.subjects && data.subjects.length > 0) {
+                    setSubjects(data.subjects.map((s, i) => ({ ...s, colorIdx: i % 3 })));
+                } else if (data.subjects && data.subjects.length === 0) {
+                    navigate('/setup');
+                }
+            } catch (err) {
+                console.error('Failed to fetch subjects:', err);
+                // Do not set fake subjects here, show error if real fetch fails
+            } finally {
+                setLoadingSubjects(false);
+            }
+        };
+        fetchSubjects();
+    }, [user, navigate]);
+
+    const handleAddSubject = async () => {
+        const name = newSubjectName.trim();
+        if (!name) { setAddError('Please enter a subject name.'); return; }
+        if (subjects.some(s => s.name.toLowerCase() === name.toLowerCase())) {
+            setAddError('You already have this subject.'); return;
+        }
+        setAddingSubject(true);
+        setAddError('');
+        try {
+            const { data } = await axios.post(`${API_BASE}/api/subjects/add`, {
+                clerkId: user?.id,
+                email: user?.primaryEmailAddress?.emailAddress,
+                name,
+            });
+            setSubjects(prev => [...prev, { ...data.subject, colorIdx: prev.length % 3 }]);
+            setNewSubjectName('');
+            setShowAddModal(false);
+        } catch (err) {
+            setAddError(err.response?.data?.error || 'Failed to add subject.');
+        } finally {
+            setAddingSubject(false);
+        }
+    };
+
+    const handleFileUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file || !selectedSubject) return;
+
+        setUploading(true);
+        setUploadDone(false);
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('subjectId', selectedSubject.id);
+            formData.append('clerkId', user?.id || '');
+            formData.append('subjectName', selectedSubject.name || '');
+
+            const { data } = await axios.post(`${API_BASE}/api/notes/upload`, formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+
+            setUploadDone(true);
+            // Navigate to subject page with sessionId
+            setTimeout(() => {
+                const targetUrl = `/subject/${encodeURIComponent(selectedSubject.name)}${data.sessionId ? `?sessionId=${data.sessionId}` : ''}`;
+                navigate(targetUrl);
+            }, 1000);
+        } catch (err) {
+            console.error('Upload failed:', err);
+            alert(`Upload failed: ${err.response?.data?.error || 'Server error'}. Please ensure the backend is running and subject matches.`);
+        } finally {
+            setUploading(false);
+        }
+    };
+
+    const handleUploadClick = () => {
+        if (!selectedSubject) {
+            alert('Please select a subject first!');
+            return;
+        }
+        fileInputRef.current.click();
+    };
+
+    return (
+        <div className="dashboard-container">
+            <aside className="sidebar">
+                <div className="sidebar-header">
+                    <BookOpen className="logo-icon" />
+                    <span>AskMyNotes</span>
+                </div>
+
+                <nav className="sidebar-nav">
+                    <button className="nav-item active">
+                        <LayoutDashboard size={20} />
+                        <span>Dashboard</span>
+                    </button>
+                    <div className="nav-divider">Your Subjects</div>
+                    {subjects.map(subject => (
+                        <button
+                            key={subject.id}
+                            className={`nav-item ${selectedSubject?.id === subject.id ? 'selected' : ''}`}
+                            onClick={() => navigate(`/subject/${subject.id}`)}
+                        >
+                            <div style={{ width: 8, height: 8, borderRadius: '50%', background: SUBJECT_COLORS[subject.colorIdx], flexShrink: 0 }} />
+                            <span style={{ fontSize: '0.85rem' }}>{subject.name}</span>
+                        </button>
+                    ))}
+                </nav>
+
+                <div className="sidebar-footer">
+                    <SignOutButton>
+                        <button className="nav-item text-danger">
+                            <LogOut size={20} />
+                            <span>Logout</span>
+                        </button>
+                    </SignOutButton>
+                </div>
+            </aside>
+
+            <main className="dashboard-main">
+                <header className="dash-header">
+                    <div className="user-welcome">
+                        <h1>Hello, {user?.firstName || 'Student'} </h1>
+                        <p>Ready to master your subjects today?</p>
+                    </div>
+                    <div className="dash-actions">
+                        {subjects.length < 3 && (
+                            <button
+                                className="btn-add-subject"
+                                onClick={() => { setShowAddModal(true); setAddError(''); setNewSubjectName(''); }}
+                            >
+                                <Plus size={16} />
+                                Add Subject
+                            </button>
+                        )}
+                        <ThemeToggle />
+                        <UserButton afterSignOutUrl="/" />
+                    </div>
+                </header>
+
+                {/* Add Subject Modal */}
+                {showAddModal && (
+                    <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.93, y: -12 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="add-subject-modal"
+                            onClick={e => e.stopPropagation()}
+                        >
+                            <div className="modal-header">
+                                <h3>Add a New Subject</h3>
+                                <button className="modal-close" onClick={() => setShowAddModal(false)}><X size={18} /></button>
+                            </div>
+                            <p className="modal-sub">You can add up to 3 subjects total. ({3 - subjects.length} slot{3 - subjects.length !== 1 ? 's' : ''} remaining)</p>
+                            <input
+                                type="text"
+                                className="modal-input"
+                                placeholder="e.g. Quantum Physics, Economics..."
+                                value={newSubjectName}
+                                onChange={e => { setNewSubjectName(e.target.value); setAddError(''); }}
+                                onKeyDown={e => e.key === 'Enter' && handleAddSubject()}
+                                autoFocus
+                            />
+                            {addError && <p className="modal-error">{addError}</p>}
+                            <div className="modal-actions">
+                                <button className="btn-secondary" onClick={() => setShowAddModal(false)}>Cancel</button>
+                                <button
+                                    className="btn-primary"
+                                    onClick={handleAddSubject}
+                                    disabled={!newSubjectName.trim() || addingSubject}
+                                >
+                                    {addingSubject ? <Loader2 size={16} className="spin" /> : <Plus size={16} />}
+                                    {addingSubject ? 'Adding...' : 'Add Subject'}
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+
+                <div className="stats-row">
+                    <div className="stat-card">
+                        <h3>Active Subjects</h3>
+                        <div className="stat-value">{subjects.length}</div>
+                    </div>
+                    <div className="stat-card">
+                        <h3>Total Notes</h3>
+                        <div className="stat-value">{subjects.reduce((a, s) => a + (s.notes?.length || 0), 0)}</div>
+                    </div>
+                    <div className="stat-card">
+                        <h3>Study Ready</h3>
+                        <div className="stat-value">✓</div>
+                    </div>
+                </div>
+
+                <div className="upload-section">
+                    <div className="upload-card">
+                        <div className="card-header">
+                            <h2>Upload Notes</h2>
+                            <p>Select a subject, then upload a PDF or TXT file.</p>
+                        </div>
+
+                        <div className="upload-controls">
+                            <div className="subject-dropdown">
+                                <label>Select Subject</label>
+                                <select
+                                    value={selectedSubject?.id || ''}
+                                    onChange={(e) => {
+                                        setSelectedSubject(subjects.find(s => s.id === e.target.value) || null);
+                                        setUploadDone(false);
+                                    }}
+                                >
+                                    <option value="" disabled>Choose a subject…</option>
+                                    {subjects.map(s => (
+                                        <option key={s.id} value={s.id}>{s.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="file-drop-area" onClick={handleUploadClick}>
+                                {uploading ? (
+                                    <Loader2 size={40} className="spin" style={{ color: 'var(--primary)' }} />
+                                ) : uploadDone ? (
+                                    <CheckCircle size={40} style={{ color: '#22c55e' }} />
+                                ) : (
+                                    <FileUp size={40} className="upload-icon" />
+                                )}
+                                <p>
+                                    {uploading ? 'Uploading & processing...' :
+                                        uploadDone ? 'Upload complete! Redirecting...' :
+                                            <>Drag & drop or <span>browse files</span></>}
+                                </p>
+                                <input
+                                    ref={fileInputRef}
+                                    type="file"
+                                    className="hidden-file-input"
+                                    accept=".pdf,.txt"
+                                    onChange={handleFileUpload}
+                                />
+                            </div>
+
+                            <button
+                                className="btn-primary btn-full"
+                                onClick={handleUploadClick}
+                                disabled={!selectedSubject || uploading}
+                            >
+                                <Plus size={20} />
+                                {selectedSubject ? `Upload to ${selectedSubject.name}` : 'Select a subject first'}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="recent-activity">
+                        <h2>Your Subjects</h2>
+                        {loadingSubjects ? (
+                            <div style={{ display: 'flex', justifyContent: 'center', padding: '2rem' }}>
+                                <Loader2 size={24} className="spin" style={{ color: 'var(--primary)' }} />
+                            </div>
+                        ) : (
+                            <div className="subject-grid">
+                                {subjects.map((subject) => (
+                                    <motion.div
+                                        key={subject.id}
+                                        whileHover={{ x: 4 }}
+                                        className="mini-card"
+                                        onClick={() => navigate(`/subject/${subject.id}`)}
+                                    >
+                                        <div className="mini-card-icon">
+                                            <BookOpen size={24} style={{ color: SUBJECT_COLORS[subject.colorIdx] }} />
+                                        </div>
+                                        <div className="mini-card-info">
+                                            <h4>{subject.name}</h4>
+                                            <p>{subject.notes?.length || 0} files uploaded</p>
+                                        </div>
+                                        <ExternalLink size={16} className="mini-card-link" />
+                                    </motion.div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </main>
+        </div>
+    );
+};
+
+export default Dashboard;
