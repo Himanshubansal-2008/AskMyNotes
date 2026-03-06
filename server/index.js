@@ -304,7 +304,7 @@ app.post('/api/ai/ask', async (req, res) => {
         const historyContext = history.reverse().map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n');
 
         const context = notes.map(n => `[File: ${n.filename}]\n${n.content}`).join('\n\n---\n\n');
-        const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
         const prompt = `You are a supportive, teacher-like study assistant named "Study Copilot". 
 Your goal is to explain concepts clearly and conversationally.
 Answer the student's question using ONLY the provided notes for this specific chat session.
@@ -385,7 +385,7 @@ app.post('/api/ai/study-tasks', async (req, res) => {
         }
 
         const context = notes.map(n => `[File: ${n.filename}]\n${n.content}`).join('\n\n---\n\n');
-        const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
         const prompt = `You are a strict academic examiner. Based ONLY on the provided study notes for the subject "${subject.name}", generate a study task set.
         
 CRITICAL RULES:
