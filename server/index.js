@@ -1,4 +1,4 @@
-xœimport express from 'express';
+import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import cookieParser from 'cookie-parser';
@@ -34,6 +34,7 @@ const allowedOrigins = [
     'http://localhost:5173',
     'http://localhost:3000',
     'https://vedam-hack.vercel.app',
+    'https://ask-my-notes-sigma.vercel.app', // ← your deployed frontend
     process.env.CLIENT_URL,
 ]
     .filter(Boolean)
