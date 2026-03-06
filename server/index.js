@@ -352,6 +352,26 @@ Include: The Answer (with citations), Confidence: [High/Medium/Low]`;
     }
 });
 
+// GET previously generated study sets for a subject
+app.get('/api/ai/study-sets', async (req, res) => {
+    const { clerkId, subjectName } = req.query;
+    if (!clerkId || !subjectName) {
+        return res.status(400).json({ error: 'clerkId and subjectName required' });
+    }
+    try {
+        const { subject } = await getNotesForSubject(clerkId, subjectName);
+        const studySets = await prisma.studySet.findMany({
+            where: { subjectId: subject.id },
+            orderBy: { createdAt: 'desc' },
+            take: 10
+        });
+        res.json({ studySets });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Failed to fetch study sets' });
+    }
+});
+
 app.post('/api/ai/study-tasks', async (req, res) => {
     const { clerkId, subjectName } = req.body;
     if (!clerkId || !subjectName) {
