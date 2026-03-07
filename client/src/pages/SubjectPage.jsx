@@ -46,6 +46,7 @@ const SubjectPage = () => {
     const fileInputRef = useRef(null);
     const chatEndRef = useRef(null);
     const synthRef = useRef(window.speechSynthesis);
+    const isSendingRef = useRef(false); // Prevents duplicate Gemini requests
 
     useEffect(() => {
         if ('webkitSpeechRecognition' in window) {
@@ -255,7 +256,8 @@ const SubjectPage = () => {
     };
 
     const sendMessage = async () => {
-        if (!input.trim() || loading) return;
+        if (!input.trim() || loading || isSendingRef.current) return;
+        isSendingRef.current = true; // Lock to prevent double-fire
         const userMsg = { role: 'user', content: input };
         setMessages(prev => [...prev, userMsg]);
         setInput('');
@@ -276,6 +278,7 @@ const SubjectPage = () => {
             setMessages(prev => [...prev, { role: 'assistant', content: `⚠️ ${msg}` }]);
         } finally {
             setLoading(false);
+            isSendingRef.current = false; // Unlock
         }
     };
 

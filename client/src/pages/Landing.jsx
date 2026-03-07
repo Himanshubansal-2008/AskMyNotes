@@ -1,6 +1,6 @@
 import React from 'react';
 import { useAuth, SignInButton, SignUpButton, useUser } from '@clerk/clerk-react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, Link } from 'react-router-dom';
 import { BookOpen, Sparkles, Target, ArrowRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useEffect, useState } from 'react';
@@ -25,7 +25,6 @@ const Landing = () => {
                 });
                 setRedirectTarget(data.hasSubjects ? '/dashboard' : '/setup');
             } catch {
-
                 setRedirectTarget('/dashboard');
             }
         };
@@ -43,12 +42,21 @@ const Landing = () => {
                 </div>
                 <div className="nav-links">
                     <ThemeToggle />
-                    <SignInButton mode="modal">
-                        <button className="btn-secondary">Sign In</button>
-                    </SignInButton>
-                    <SignUpButton mode="modal">
-                        <button className="btn-primary">Get Started</button>
-                    </SignUpButton>
+                    {/* Only show auth buttons when the user is NOT signed in */}
+                    {!isSignedIn ? (
+                        <>
+                            <SignInButton mode="modal">
+                                <button className="btn-secondary">Sign In</button>
+                            </SignInButton>
+                            <SignUpButton mode="modal">
+                                <button className="btn-primary">Get Started</button>
+                            </SignUpButton>
+                        </>
+                    ) : (
+                        <Link to="/dashboard">
+                            <button className="btn-primary">Go to Dashboard</button>
+                        </Link>
+                    )}
                 </div>
             </nav>
 
@@ -69,14 +77,25 @@ const Landing = () => {
                         grounded strictly in <em>your</em> uploaded material. No hallucinations.
                     </p>
                     <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
-                        <SignUpButton mode="modal">
-                            <button className="btn-primary btn-large">
-                                Start for Free <ArrowRight size={18} />
-                            </button>
-                        </SignUpButton>
-                        <SignInButton mode="modal">
-                            <button className="btn-secondary btn-large">Already have an account?</button>
-                        </SignInButton>
+                        {/* Only show auth CTAs when not signed in */}
+                        {!isSignedIn ? (
+                            <>
+                                <SignUpButton mode="modal">
+                                    <button className="btn-primary btn-large">
+                                        Start for Free <ArrowRight size={18} />
+                                    </button>
+                                </SignUpButton>
+                                <SignInButton mode="modal">
+                                    <button className="btn-secondary btn-large">Already have an account?</button>
+                                </SignInButton>
+                            </>
+                        ) : (
+                            <Link to="/dashboard">
+                                <button className="btn-primary btn-large">
+                                    Go to Dashboard <ArrowRight size={18} />
+                                </button>
+                            </Link>
+                        )}
                     </div>
                 </motion.div>
 

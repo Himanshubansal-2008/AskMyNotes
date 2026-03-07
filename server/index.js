@@ -20,6 +20,11 @@ const PORT = process.env.PORT || 5000;
 const prisma = new PrismaClient();
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
+// Startup diagnostics — logged to Render console
+console.log(`[Startup] PORT=${PORT}`);
+console.log(`[Startup] GEMINI_API_KEY set: ${!!process.env.GEMINI_API_KEY}`);
+console.log(`[Startup] DATABASE_URL set: ${!!process.env.DATABASE_URL}`);
+
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
         const dir = path.join(__dirname, 'uploads');
@@ -304,7 +309,8 @@ app.post('/api/ai/ask', async (req, res) => {
         const historyContext = history.reverse().map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n');
 
         const context = notes.map(n => `[File: ${n.filename}]\n${n.content}`).join('\n\n---\n\n');
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+        // Use gemini-1.5-flash as the primary model (widely available & stable)
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
         const prompt = `You are a supportive, teacher-like study assistant named "Study Copilot". 
 Your goal is to explain concepts clearly and conversationally.
 Answer the student's question using ONLY the provided notes for this specific chat session.
@@ -327,7 +333,18 @@ QUESTION: ${question}
 Provide your response in a conversational way. 
 Include: The Answer (with citations), Confidence: [High/Medium/Low]`;
 
-        const result = await model.generateContent(prompt);
+        let result;
+        try {
+            result = await model.generateContent(prompt);
+        } catch (geminiError) {
+            // Detailed Gemini error logging for Render console
+            console.error('[Gemini Error] Status:', geminiError?.status);
+            console.error('[Gemini Error] Message:', geminiError?.message);
+            console.error('[Gemini Error] Details:', JSON.stringify(geminiError?.errorDetails || {}));
+            const geminiMsg = geminiError?.message || 'Gemini API call failed';
+            return res.status(500).json({ error: `AI service error: ${geminiMsg}` });
+        }
+
         const answer = result.response.text();
 
         await prisma.chatMessage.createMany({
@@ -337,7 +354,6 @@ Include: The Answer (with citations), Confidence: [High/Medium/Low]`;
             ]
         });
 
-        // Optionally update session title if it's the first message
         if (history.length === 0) {
             await prisma.chatSession.update({
                 where: { id: session.id },
@@ -347,7 +363,10 @@ Include: The Answer (with citations), Confidence: [High/Medium/Low]`;
 
         res.json({ answer });
     } catch (error) {
-        console.error(error);
+        // Log the full error (DB errors, Prisma errors, etc.) to Render console
+        console.error('[/api/ai/ask Error] Type:', error?.constructor?.name);
+        console.error('[/api/ai/ask Error] Message:', error?.message);
+        console.error('[/api/ai/ask Error] Stack:', error?.stack);
         res.status(500).json({ error: 'AI query failed: ' + error.message });
     }
 });
@@ -385,7 +404,7 @@ app.post('/api/ai/study-tasks', async (req, res) => {
         }
 
         const context = notes.map(n => `[File: ${n.filename}]\n${n.content}`).join('\n\n---\n\n');
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
         const prompt = `You are a strict academic examiner. Based ONLY on the provided study notes for the subject "${subject.name}", generate a study task set.
         
 CRITICAL RULES:
