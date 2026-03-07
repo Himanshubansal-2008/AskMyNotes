@@ -174,6 +174,27 @@ async function getNotesForSubject(clerkId, subjectName) {
     return { subject, notes: subject.notes };
 }
 
+// --- Gemini helper with retry on 429 ---
+async function callGeminiWithRetry(model, prompt, maxRetries = 3) {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            const result = await model.generateContent(prompt);
+            return result;
+        } catch (err) {
+            const is429 = err?.message?.includes('429') || err?.status === 429;
+            if (is429 && attempt < maxRetries) {
+                // Extract retry delay from Gemini response (default 35s)
+                const retryMatch = err?.message?.match(/(\d+(?:\.\d+)?)s/);
+                const waitMs = retryMatch ? Math.ceil(parseFloat(retryMatch[1])) * 1000 : 35000;
+                console.warn(`[Gemini 429] Attempt ${attempt}/${maxRetries}. Waiting ${waitMs}ms before retry...`);
+                await new Promise(r => setTimeout(r, waitMs));
+            } else {
+                throw err; // Re-throw on non-429 or final attempt
+            }
+        }
+    }
+}
+
 // --- Session Management ---
 
 app.post('/api/sessions', async (req, res) => {
@@ -338,14 +359,17 @@ Include: The Answer (with citations), Confidence: [High/Medium/Low]`;
 
         let result;
         try {
-            result = await model.generateContent(prompt);
+            result = await callGeminiWithRetry(model, prompt);
         } catch (geminiError) {
-            // Detailed Gemini error logging for Render console
             console.error('[Gemini Error] Status:', geminiError?.status);
             console.error('[Gemini Error] Message:', geminiError?.message);
-            console.error('[Gemini Error] Details:', JSON.stringify(geminiError?.errorDetails || {}));
-            const geminiMsg = geminiError?.message || 'Gemini API call failed';
-            return res.status(500).json({ error: `AI service error: ${geminiMsg}` });
+            const is429 = geminiError?.message?.includes('429');
+            if (is429) {
+                return res.status(429).json({
+                    error: '⏳ AI quota limit reached. Please wait 30 seconds and try again, or contact support to upgrade the API key.'
+                });
+            }
+            return res.status(500).json({ error: `AI service error: ${geminiError?.message}` });
         }
 
         const answer = result.response.text();

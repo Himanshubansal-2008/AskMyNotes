@@ -274,7 +274,14 @@ const SubjectPage = () => {
             setMessages(prev => [...prev, { role: 'assistant', content: answer }]);
             speakText(answer);
         } catch (err) {
-            const msg = err?.response?.data?.error || 'Server unreachable — ensure the backend is running on port 5001.';
+            const status = err?.response?.status;
+            const serverMsg = err?.response?.data?.error;
+            let msg;
+            if (status === 429) {
+                msg = serverMsg || '⏳ The AI quota limit has been reached. Please wait 30 seconds and try again.';
+            } else {
+                msg = serverMsg || 'Server unreachable — ensure the backend is running on port 5001.';
+            }
             setMessages(prev => [...prev, { role: 'assistant', content: `⚠️ ${msg}` }]);
         } finally {
             setLoading(false);
