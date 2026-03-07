@@ -18,7 +18,10 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 5000;
 const prisma = new PrismaClient();
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+// Use v1 (stable) endpoint — v1beta is default but not always available for all keys
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '', {
+    apiVersion: 'v1'
+});
 
 // Startup diagnostics — logged to Render console
 console.log(`[Startup] PORT=${PORT}`);
