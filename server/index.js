@@ -1,5 +1,4 @@
 import express from 'express';
-import cors from 'cors';
 import dotenv from 'dotenv';
 import cookieParser from 'cookie-parser';
 import multer from 'multer';
@@ -48,20 +47,28 @@ const allowedOrigins = [
     .filter(Boolean)
     .map(o => o.replace(/\/$/, '')); // strip trailing slashes
 
-app.use(cors({
-    origin: (origin, callback) => {
-        // Allow requests with no origin (mobile apps, curl, Postman, Render health checks)
-        if (!origin) return callback(null, true);
-        const normalised = origin.replace(/\/$/, '');
-        if (allowedOrigins.includes(normalised)) {
-            callback(null, true);
-        } else {
-            console.warn(`CORS blocked origin: ${origin}`);
-            callback(new Error(`CORS blocked: ${origin}`));
-        }
-    },
-    credentials: true
-}));
+// CORS — must be first middleware
+// Using a manual approach so blocked origins never bypass CORS headers
+app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    const normalised = (origin || '').replace(/\/$/, '');
+
+    if (!origin || allowedOrigins.includes(normalised)) {
+        // Allowed — set headers and continue
+        res.header('Access-Control-Allow-Origin', origin || '*');
+        res.header('Access-Control-Allow-Credentials', 'true');
+        res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+        res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With');
+        if (req.method === 'OPTIONS') return res.sendStatus(204);
+        return next();
+    }
+
+    // Blocked origin — respond with 403 (headers still sent so browser sees the error clearly)
+    console.warn(`CORS blocked origin: ${origin}`);
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
+    return res.status(403).json({ error: `CORS blocked: ${origin}` });
+});
 app.use(express.json());
 app.use(cookieParser());
 
@@ -479,4 +486,24 @@ Rules:
 
 app.listen(PORT, () => {
     console.log(`✅ Server running on http://localhost:${PORT}`);
+});
+
+// Global error handler — runs AFTER all routes.
+// CRITICAL: always sets CORS headers so the browser never sees a bare 500.
+app.use((err, req, res, next) => {
+    const origin = req.headers.origin;
+    if (origin) {
+        res.header('Access-Control-Allow-Origin', origin);
+        res.header('Access-Control-Allow-Credentials', 'true');
+    }
+    console.error('[Global Error Handler]', err?.message || err);
+    res.status(err?.status || 500).json({ error: err?.message || 'Internal server error' });
+});
+
+// Prevent server from crashing on unhandled async errors
+process.on('unhandledRejection', (reason) => {
+    console.error('[unhandledRejection]', reason);
+});
+process.on('uncaughtException', (err) => {
+    console.error('[uncaughtException]', err.message);
 });
